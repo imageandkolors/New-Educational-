@@ -1,0 +1,207 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+  BURSAR
+  STORE_MANAGER
+}
+
+enum LicenseStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+  PENDING
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+model School {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique
+  address     String?
+  phone       String?
+  email       String?
+  website     String?
+  logo        String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  branches    Branch[]
+  licenses    License[]
+  settings    SchoolSettings[]
+
+  @@map("schools")
+}
+
+model Branch {
+  id          String   @id @default(uuid())
+  schoolId    String   @map("school_id")
+  name        String
+  code        String
+  address     String?
+  phone       String?
+  email       String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdBy   String?  @map("created_by")
+
+  // Relations
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  users       User[]
+  licenses    License[]
+  auditLogs   AuditLog[]
+  notifications Notification[]
+
+  @@unique([schoolId, code])
+  @@map("branches")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  branchId    String   @map("branch_id")
+  email       String   @unique
+  username    String?  @unique
+  firstName   String   @map("first_name")
+  lastName    String   @map("last_name")
+  phone       String?
+  avatar      String?
+  role        UserRole
+  isActive    Boolean  @default(true) @map("is_active")
+  password    String
+  lastLogin   DateTime? @map("last_login")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdBy   String?  @map("created_by")
+
+  // Relations
+  branch      Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  auditLogs   AuditLog[]
+  notifications Notification[]
+  sessions    Session[]
+
+  @@map("users")
+}
+
+model License {
+  id            String        @id @default(uuid())
+  schoolId      String        @map("school_id")
+  branchId      String        @map("branch_id")
+  licenseKey    String        @unique @map("license_key")
+  deviceId      String?       @map("device_id")
+  deviceName    String?       @map("device_name")
+  deviceInfo    Json?         @map("device_info")
+  status        LicenseStatus @default(PENDING)
+  maxUsers      Int           @default(100) @map("max_users")
+  currentUsers  Int           @default(0) @map("current_users")
+  features      Json?         // JSON array of enabled features
+  expiresAt     DateTime      @map("expires_at")
+  lastSync      DateTime?     @map("last_sync")
+  isOffline     Boolean       @default(false) @map("is_offline")
+  offlineToken  String?       @map("offline_token")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  createdBy     String?       @map("created_by")
+
+  // Relations
+  school        School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  branch        Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@map("licenses")
+}
+
+model SchoolSettings {
+  id          String   @id @default(uuid())
+  schoolId    String   @map("school_id")
+  key         String
+  value       Json
+  category    String   @default("general")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdBy   String?  @map("created_by")
+
+  // Relations
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, key])
+  @@map("school_settings")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  branchId    String   @map("branch_id")
+  userId      String?  @map("user_id")
+  action      String
+  resource    String
+  resourceId  String?  @map("resource_id")
+  oldValues   Json?    @map("old_values")
+  newValues   Json?    @map("new_values")
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  branch      Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
+
+model Notification {
+  id          String             @id @default(uuid())
+  branchId    String             @map("branch_id")
+  userId      String?            @map("user_id")
+  title       String
+  message     String
+  type        String             @default("info")
+  status      NotificationStatus @default(UNREAD)
+  data        Json?              // Additional notification data
+  expiresAt   DateTime?          @map("expires_at")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  createdBy   String?            @map("created_by")
+
+  // Relations
+  branch      Branch             @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user        User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model Session {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  token       String   @unique
+  deviceId    String?  @map("device_id")
+  deviceInfo  Json?    @map("device_info")
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  isActive    Boolean  @default(true) @map("is_active")
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
